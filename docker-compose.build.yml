@@ -1,0 +1,17 @@
+# Override de desenvolvimento: adiciona "build:" aos serviços que usam a
+# imagem da API. O docker-compose.yml de entrega não constrói nada — a Rinha
+# exige imagens publicamente disponíveis.
+#
+# Uso local:
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml \
+#                  -f docker-compose.local.yml up -d --build
+services:
+  api1:
+    build:
+      context: .
+  api2:
+    build:
+      context: .
+  indexer:
+    build:
+      context: .

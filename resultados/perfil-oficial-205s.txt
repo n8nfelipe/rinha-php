@@ -1,0 +1,50 @@
+Perfil oficial Rinha 2023 Q3 (205 s) — k6 replicando RinhaBackendSimulation.scala
+Data: 2026-10-27 23:32 UTC
+Host: 8 cores, 11th Gen Intel(R) Core(TM) i5-1135G7 @ 2.40GHz
+
+    CUSTOM
+    pessoas_criadas.................: 46431  226.4518/s
+    pessoas_rejeitadas..............: 8204   40.012288/s
+
+    HTTP
+    http_req_duration...............: avg=777.8µs  min=168.85µs med=428.28µs p(90)=927.59µs p(95)=1.16ms   p(99)=2.78ms  p(99.9)=76.54ms  max=247.71ms
+      { endpoint:busca_invalida }...: avg=460.81µs min=168.85µs med=286.24µs p(90)=536.53µs p(95)=781.36µs p(99)=1.99ms  p(99.9)=25.93ms  max=80.37ms 
+      { endpoint:busca }............: avg=1.37ms   min=421.88µs med=988.87µs p(90)=1.46ms   p(95)=1.78ms   p(99)=3.94ms  p(99.9)=94.04ms  max=247.71ms
+      { endpoint:consulta }.........: avg=690.72µs min=207.08µs med=348.38µs p(90)=563.15µs p(95)=760.87µs p(99)=2.12ms  p(99.9)=83.42ms  max=173.67ms
+      { endpoint:criacao }..........: avg=771.73µs min=192.84µs med=478.51µs p(90)=831.73µs p(95)=1.04ms   p(99)=2.87ms  p(99.9)=67.16ms  max=168.07ms
+      { expected_response:true }....: avg=777.8µs  min=168.85µs med=428.28µs p(90)=927.59µs p(95)=1.16ms   p(99)=2.78ms  p(99.9)=76.54ms  max=247.71ms
+    http_req_failed.................: 0.00%  0 out of 114847
+    http_reqs.......................: 114847 560.128143/s
+
+    EXECUTION
+    iteration_duration..............: avg=14.16ms  min=213.36µs med=13.44ms  p(90)=28.08ms  p(95)=29.96ms  p(99)=31.93ms p(99.9)=114.88ms max=282.43ms
+    iterations......................: 68415  333.671467/s
+    vus.............................: 11     min=0           max=17 
+    vus_max.........................: 185    min=185         max=185
+
+    NETWORK
+    data_received...................: 40 MB  197 kB/s
+    data_sent.......................: 27 MB  132 kB/s
+
+
+
+
+running (3m25.0s), 000/185 VUs, 68415 complete and 0 interrupted iterations
+busca_warmup    ✓ [ 100% ] 00/10 VUs    25s   2.00 iters/s
+invalida_warmup ✓ [ 100% ] 00/05 VUs    25s   2.00 iters/s
+post_warmup_a   ✓ [ 100% ] 00/10 VUs    10s   2.00 iters/s
+post_warmup_b   ✓ [ 100% ] 00/20 VUs    15s   5.00 iters/s
+busca_ramp      ✓ [ 100% ] 000/040 VUs  3m0s  100.00 iters/s
+invalida_ramp   ✓ [ 100% ] 00/20 VUs    3m0s  40.00 iters/s
+post_ramp       ✓ [ 100% ] 00/80 VUs    3m0s  599.99 iters/s
+
+=== CPU e throttling (delta entre a 1a e a ultima amostra) ===
+api1     cpu= 0,07 cores  eventos=10    congelado=1,10s  janela=205,3s
+api2     cpu= 0,07 cores  eventos=14    congelado=0,91s  janela=205,3s
+db       cpu= 0,20 cores  eventos=7     congelado=1,05s  janela=205,3s
+host     cpu= 1,20 de 8 cores  (janela=205,3s)
+indexer  cpu= 0,00 cores  eventos=0     congelado=0,00s  janela=205,3s
+nginx    cpu= 0,05 cores  eventos=1     congelado=0,01s  janela=205,3s
+
+=== contagem final ===
+46431

@@ -1,0 +1,18 @@
+{
+	admin off
+	auto_https off
+	persist_config off
+}
+
+:80 {
+	# "php" + "match /*" manda 100% dos requests direto para o worker, sem
+	# tentar resolver arquivos estáticos no disco (o php_server faria isso).
+	php {
+		root /app
+		worker {
+			file /app/src/worker.php
+			num {$PHP_WORKERS:8}
+			match /*
+		}
+	}
+}

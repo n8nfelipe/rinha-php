@@ -1,0 +1,13 @@
+# Override apenas para desenvolvimento local nesta máquina, onde a porta 9999
+# já está ocupada por outro stack. O arquivo oficial (docker-compose.yml)
+# continua expondo 9999, como a Rinha exige.
+services:
+  api1:
+    environment:
+      APP_DEBUG: "1"
+  api2:
+    environment:
+      APP_DEBUG: "1"
+  nginx:
+    ports: !override
+      - "19999:9999"

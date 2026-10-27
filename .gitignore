@@ -1,0 +1,10 @@
+# Dados gerados pelo gerador de recursos (24 MB, reproduzíveis)
+stress/data/
+
+# Resultados de execução locais
+resultados/*.json
+resultados/*.log
+
+# Editores / SO
+.DS_Store
+*.swp
