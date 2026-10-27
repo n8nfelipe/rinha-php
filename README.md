@@ -128,9 +128,10 @@ indexador precisava. Uma espiral: mais atraso → mais CPU → mais atraso.
 Por isso o lote entra na *pending list* (`fastupdate=on`) e é derramado de uma vez
 com `gin_clean_pending_list()`; e o ramo acima da marca d'água é limitado a 1000
 linhas. O indexador drena 500 linhas por ~90 ms, então o atraso normal cabe com
-folga no teto; se algum dia não couber, as linhas excedentes simplesmente
-aparecem na busca quando a marca avançar (consistência eventual, que a regra
-permite). O custo de busca fica limitado por construção, não por sorte.
+folga no teto; se algum dia não couber, as linhas excedentes aparecem na busca
+quando a marca avançar. A janela é de milissegundos e a busca é servida do
+próprio Postgres — não há cache no caminho. O custo de busca fica limitado por
+construção, não por sorte.
 
 Uma fila com `DELETE` por lote foi tentada antes e descartada: o churn gerava
 milhares de tuplas mortas, e a busca — que precisava ler a fila — passava a
@@ -162,6 +163,26 @@ B-tree. UUID v4 aleatório fragmentaria o índice.
 `synchronous_commit=off` (o WAL vai para disco em poucos ms, mas o `POST` não
 espera o fsync — a regra exige persistência *eventual* em disco),
 `wal_level=minimal`, `jit=off`, checkpoints espaçados.
+
+## Estrutura do projeto
+
+```
+src/
+  worker.php       loop do FrankenPHP (worker mode)
+  App.php          rotas, validação, UUIDv7, resposta pré-serializada
+  Repository.php   PDO, statements preparados, insert/get/busca/count
+  indexer.php      drena pessoas -> pessoas_busca por marca d'água
+db/init.sql        schema, índice GIN e parâmetros de autovacuum
+docker/            Caddyfile e php.ini usados pela imagem
+Dockerfile         imagem da API (FrankenPHP + extensões PHP)
+nginx.conf         round-robin + keepalive
+docker-compose.yml        entrega: imagens públicas, porta 9999
+docker-compose.build.yml  build local da imagem
+docker-compose.local.yml  porta 19999 (a 9999 está ocupada nesta máquina)
+scripts/           checagem de orçamento e diagnóstico do banco
+stress/            k6 replicando o perfil oficial + gerador de payloads
+resultados/        saída do k6 do perfil oficial
+```
 
 ## Como rodar
 
@@ -201,14 +222,27 @@ consistência (todo `201` é seguido de `GET` no `Location`).
 PROFILE=full ./stress/bench.sh
 
 # bancada: taxa constante para achar o gargalo
-PROFILE=bench POST_RATE=600 SEARCH_RATE=100 INVALID_RATE=40 DURATION=30s \
+PROFILE=bench POST_RATE=600 SEARCH_RATE=100 INVALID_RATE=40 DURATION=90s \
   ./stress/bench.sh
 ```
 
-`stress/bench.sh` também amostra a CPU de cada container durante o teste, lendo
-`cpu.stat` do cgroup: mostra a CPU real consumida (em cores) e
-`nr_throttled`/`throttled_usec`, que revelam quando um container bateu na cota e
-ficou congelado — a causa típica de rabo de p99.
+`stress/bench.sh` mede a CPU de cada container lendo `cpu.stat` do cgroup
+**direto do host**: mostra a CPU real (em cores), `nr_throttled`/`throttled_usec`
+— que revelam quando um container bateu na cota e ficou congelado, a causa típica
+de rabo de p99 — e a CPU do host inteiro, para separar gargalo do stack de ruído
+externo.
+
+Para ver o mecanismo interno do banco durante a carga (backends ativos, eventos
+de espera, atraso do indexador, texto das queries que saturaram):
+
+```bash
+./scripts/diagnostico-db.sh 60 /tmp/opencode/diag.log
+```
+
+> Esse script usa `docker compose exec db psql`, que roda **dentro** do container
+> do banco e consome a cota dele. Use-o para entender o mecanismo, não para medir
+> CPU — para isso existe o `bench.sh`. Os deltas são normalizados pelo tempo real
+> entre amostras justamente porque, com o banco saturado, cada `exec` demora.
 
 ### Verificar o orçamento de CPU/memória
 
@@ -224,6 +258,7 @@ Soma os `deploy.resources.limits` de todos os serviços e falha se passar de
 | regra | situação |
 |---|---|
 | 4 endpoints com os status corretos | ✅ |
+| busca contida em `apelido`, `nome` e/ou `stack`, case-insensitive, até 50 | ✅ |
 | banco entre Postgres/MySQL/MongoDB | ✅ PostgreSQL 17 |
 | docker-compose na porta 9999 | ✅ (`docker-compose.yml`) |
 | 2 instâncias da API + 1 load balancer | ✅ |
@@ -257,6 +292,11 @@ O teto teórico do perfil é ~47,5k: 205 s de rampa, 88,3% dos payloads válidos
 menos os apelidos repetidos quando o feeder circular dá a volta. **46.431 é
 97,7% desse teto** — o que falta é payload inválido, não capacidade perdida.
 
+Para referência, o [ranking oficial](https://github.com/zanfranceschi/rinha-de-backend-2023-q3#resultado-da-etapa-final)
+terminou com 44.936 registros em 1º lugar e p99 de 17,4 ms. O número acima é de
+uma execução local (i5-1135G7, 8 cores, máquina compartilhada), então serve como
+ordem de grandeza, não como comparação direta com a EC2 do torneio.
+
 CPU média no período: `db` 0,20 core (de 0,89), `api1`/`api2` 0,07 (de 0,21),
 `nginx` 0,05 (de 0,15). Sete eventos de throttle no banco, 1,05 s congelados em
 205 s.
@@ -271,6 +311,16 @@ ao último segundo.
 | pessoas criadas | 45.808 (508,8/s) |
 | p99 geral | 10,75 ms |
 | iterações perdidas | 102 de 66.603 |
+
+### Conferência funcional
+
+Além do k6, uma bateria de 16 checagens cobre os contratos: `201` com
+`Location`, `200` com o JSON idêntico ao criado, `404` para id inexistente e
+malformado, `422` para apelido duplicado/campo nulo/data inválida, `400` para
+JSON quebrado e `t` ausente, busca por `apelido`/`nome`/`stack`,
+case-insensitive com Unicode (`JOSÉ ROBERTO` acha `José Roberto`), `%` tratado
+como literal e termo que atravessaria a fronteira entre campos retornando vazio.
+16/16 passaram.
 
 ### Evolução
 
